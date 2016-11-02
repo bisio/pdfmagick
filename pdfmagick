@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+
+import argparse 
+import sys
+
+def sniff(pdf_path):
+    with open(pdf_path) as pdf_file:
+        header = pdf_file.read(8)
+        if header[0:7] != '%PDF-1.':
+            print "{} is not a pdf".format(pdf_path)
+            sys.exit(1)
+        
+        minor_version_number = int(header[7])
+        print "PDF-1.{}".format(minor_version_number)
+    
+            
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--sniff','-s',action='store',help='sniff pdf version and xref format')
+    
+    args = parser.parse_args()
+    if args.sniff:
+        sniff(args.sniff)
