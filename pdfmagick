@@ -4,6 +4,8 @@ import argparse
 import os
 import re
 import sys
+import shlex
+import subprocess
 
 TRAILER_BUFFER_SIZE = 1000
 
@@ -23,19 +25,65 @@ def sniff(pdf_path):
         xref_offset = int(re.search("\n(\d+)\n",buff).group(1))
         pdf_file.seek(xref_offset,0)
         xref_start = pdf_file.read(4)
+        result = {}
+        result['MAJOR_VERSION'] = 1
+        result['MINOR_VERSION'] = minor_version_number
         if xref_start == 'xref':
-            xref_format = '"traditional" xref'
+            result['XREF_FORMAT'] = 'TRADITIONAL'
         else:
-            xref_format = '"cross-reference streams" xref'
+            result['XREF_FORMAT'] = 'CROSS_REFERENCE_STREAMS'
+        return result
             
-        print "PDF-1.{} with {}".format(minor_version_number,xref_format)
     
+
+def sniff_and_report(pdf_path):
+    result = sniff(pdf_path)
+    xref_format = result['XREF_FORMAT']
+    minor_version_number = result['MINOR_VERSION']
+    if xref_format == 'TRADITIONAL':
+        human_xref_format = '"traditional" xref'
+    else:
+        human_xref_format = '"cross-reference streams" xref'
+    print "PDF-1.{} with {}".format(minor_version_number,human_xref_format)
+
+
+def convert(input_path,output_path):
+    UNCOMPRESS_COMMAND = '/usr/bin/pdftk {} output - uncompress'
+    UNCOMPRESS_COMMAND = UNCOMPRESS_COMMAND.format(input_path)
+    COMPRESS_COMMAND = '/usr/bin/pdftk - output - compress'
+    args = shlex.split(UNCOMPRESS_COMMAND)
+    uncompress_proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    uncompressed = uncompress_proc.communicate()[0]
+    print 'len of uncompressed is {}'.format(len(uncompressed))
+    args = shlex.split(COMPRESS_COMMAND)
+    compress_proc = subprocess.Popen(args,stdout=subprocess.PIPE,stdin=subprocess.PIPE)
+    compressed = compress_proc.communicate(input=uncompressed)[0]
+    print 'len of compressed is {}'.format(len(compressed))
+    output = open(output_path,'w')
+    output.write(compressed)
+    output.close()
+
             
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--sniff','-s',action='store',help='sniff pdf version and xref format')
+    parser.add_argument('--convert','-c',action='store_true',default=False,help='convert xref table to traditional format')
+    parser.add_argument('--output','-o',action='store',help='output file')
+    parser.add_argument('--input','-i',action='store',help= 'input file')
+    
     
     args = parser.parse_args()
     if args.sniff:
-        sniff(args.sniff)
+        sniff_and_report(args.sniff)
+
+    if args.convert and not args.output:
+        print "Please specify an output file with -o or --output" 
+        sys.exit(1)
+
+    if args.convert and not args.input:
+        print "Please specify an input file with -i or --input" 
+        sys.exit(2)
+
+    if args.convert:
+        convert(args.input, args.output)
